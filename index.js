@@ -23,9 +23,9 @@ mongoClient.connect().then(() => {
 });
 
 app.get("/participants", (req, res) => {
-	// buscando usuários
-	db.collection("participants").find().toArray().then(name => {
-		res.send(name) // array de usuários
+	
+	db.collection("participante").find().toArray().then(participantes => {
+		res.send(participantes) // array de usuários
 	});
 });
 
@@ -35,12 +35,12 @@ app.post("/participants", (req, res) => {
   const validation = userSchema.validate({name});
   
   if (validation.error) {
-   res.send(422)
+   res.sendStatus(422)
   } else{
-    db.collection('participantes')
+    db.collection('participante')
     .insertOne({name, lastStatus: Date.now()})
     .then(() => {
-      res.send(201);
+      res.sendStatus(201);
     })
   }
 
