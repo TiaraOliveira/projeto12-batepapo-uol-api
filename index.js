@@ -22,7 +22,8 @@ const messageScheme = joi.object({
   type: joi.valid('message','private_message'),
   from: joi.string()
 });
-const time = dayjs().format('HH:MM:ss')
+
+const time = dayjs().format('HH:mm:ss')
 const mongoClient = new MongoClient(process.env.MONGO_URI);
 let db;
 
@@ -30,11 +31,13 @@ mongoClient.connect().then(() => {
 	db = mongoClient.db("batepapouol");
 });
 
-app.get("/participants", (req, res) => {
-	
-	db.collection("participante").find().toArray().then(participantes => {
-		res.send(participantes) 
-	});
+app.get("/participants", async(req, res) => {
+  try{
+    const participantes = await db.collection("participante").find({}).toArray()
+    res.send(participantes)  
+  }catch{
+    res.sendStatus(500)
+  }
 });
 
 app.post("/participants", async (req, res) => {
@@ -42,7 +45,7 @@ app.post("/participants", async (req, res) => {
   const dado = req.body;
   const validation = userSchema.validate({name});
   const userexists = await db.collection('participante').findOne({name: dado.name})
- 
+ try{
   if(userexists != null){
     res.sendStatus(409)
     return
@@ -51,43 +54,82 @@ app.post("/participants", async (req, res) => {
   if (validation.error) {
    res.sendStatus(422)
   } else{
-    db.collection('participante')
-    .insertOne({name, lastStatus: Date.now()})
-    .then(() => {
-      res.sendStatus(201);
-      
-    })
-  }
-
-  ;
+    await db.collection('participante').insertOne({name, lastStatus: Date.now()})
+    await db.collection('messagem').insertOne({from:name, to:"Todos",text:"entra na sala...", type: 'status', time: time})
+    res.sendStatus(201);
+    
+  };
+ }catch{
+  res.sendStatus(500)
+ }
+  
 });
 
-app.post("/messages", (req, res) => {
+app.post("/messages", async(req, res) => {
 	const {to, text, type} = req.body;
   const from = req.headers.user;
-  console.log(req.headers.user)
-  console.log(req.body)
   const validation = messageScheme.validate({from, to, text, type});
   
   if (validation.error) {
    res.sendStatus(422)
   } else{
-    db.collection('messagem')
-    .insertOne({from, to,text, type, time})
-    .then(() => {
-      res.sendStatus(201);
-    })
+    await db.collection('messagem').insertOne({from, to,text, type, time})
+    res.sendStatus(201);
+  
   };
 });
 
-app.get("/messages", (req, res) => {
-	
-	db.collection("messagem").find().toArray().then(mensagem => {
-		res.send(mensagem) 
-	});
-});
+app.get("/messages", async (req, res) => {
+  const limit = parseInt(req.query.limit);
+  const user = req.headers.user;
+	try{
+    const mensagem = await db.collection("messagem").find({$or: [{type:"message"},{type:"status"},{ from: user }, { to: user } ]}).sort({"_id":-1}).limit(limit).toArray()
+
+   res.send(mensagem.reverse())
   
+  }catch{
+    res.sendStatus(500)
+  }
+});
 
+  
+app.post("/status"), async(req, res) =>{
+  const name = req.headers.user;
+  try {
+		const user = await db.collection("participantes").findOne({ name: name })
+		if (!user) {
+			res.sendStatus(404)
+			return;
+		}
+  	await usersColection.updateOne({name: user.name}, { $set: {"lastStatus": Date.now()} })
+		res.sendStatus(200)
+		
+	 } catch (error) {
+	  res.status(500).send(error)
+	 }
+}
 
+async function removeparticipant(){
 
-app.listen(5000, ()=>{console.log("Servidor funcionando")})
+  const timelimit = Date.now() - 10000
+ 
+
+  const participantesout = await db.collection("participante").find({ lastStatus: { $lte:timelimit} }).toArray()
+  if(participantesout.length!=0){
+   const exitmessage = participantesout.map(element =>{
+     console.log(element.name)
+     return{
+       from: element.name,to:"Todos",text:"sai da sala...", type: 'status', time: time
+     }
+    })
+    console.log(exitmessage)
+    await db.collection('messagem').insertMany(exitmessage)
+    await db.collection("participante").deleteMany({ lastStatus: { $lte:timelimit} })
+  }
+  
+  
+  
+}
+setInterval(()=> removeparticipant(),15000)
+
+app.listen(process.env.PORT, ()=>{console.log("Servidor funcionando")})
