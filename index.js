@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import joi from "joi";
 import dayjs from "dayjs";
@@ -81,7 +81,7 @@ app.post("/status", async(req, res) =>{
 		res.sendStatus(200)
 		
 	 } catch (error) {
-	  res.status(500).send(error)
+    res.sendStatus(500)
 	 }
 })
 
@@ -120,23 +120,32 @@ app.get("/messages", async (req, res) => {
 
 async function removeparticipant(){
 
-  const timelimit = Date.now() - 10000
+  const participantesout = await db.collection("participante").find({ lastStatus: { $lte:Date.now() - 10000} }).toArray()
+    if(participantesout.length!=0){
+    participantesout.forEach(element =>{
+    db.collection('messagem').insertOne({from: element.name,to:"Todos",text:"sai da sala...", type: 'status', time: time})
+    db.collection("participante").deleteOne({ name: element.name})
+    })
   
-  const participantesout = await db.collection("participante").find({ lastStatus: { $lte:timelimit} }).toArray()
-  if(participantesout.length!=0){
-  const exitmessage = participantesout.map(element =>{
-
-  return{
-  from: element.name,to:"Todos",text:"sai da sala...", type: 'status', time: time
-  }
-  })
- 
-  await db.collection('messagem').insertMany(exitmessage)
-  await db.collection("participante").deleteMany({ lastStatus: { $lte:timelimit} })
   }
   }
   setInterval(()=> removeparticipant(),15000)
   
-  
+  app.delete('/messages/:id', async (req, res) => {
+    const { id } = req.params;
+    console.log(id)
+    const user = req.headers.user;
+
+    try {
+      const usersColection = db.collection("messagem");
+      await usersColection.deleteOne({ _id: new ObjectId(id) })
+          
+      res.sendStatus(200)
+     
+     } catch (error) {
+      res.status(500).send(error)
+    
+     }
+  }); 
 
 app.listen(process.env.PORT, ()=>{console.log("Servidor funcionando")})
