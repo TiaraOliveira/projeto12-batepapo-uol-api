@@ -65,11 +65,37 @@ app.post("/participants", async (req, res) => {
   
 });
 
+  
+app.post("/status"), async(req, res) =>{
+  console.log("aqui")
+  const {user} = req.headers;
+  console.log(user)
+  try {
+		const participantes = await db.collection("participante").findOne({ name: user })
+		if (!participantes) {
+			res.Status(404).send("erros do status")
+			return;
+		}
+    
+  	await usersColection.updateOne({name: participante.user}, { $set: {"lastStatus": Date.now()} })
+		res.sendStatus(200)
+		
+	 } catch (error) {
+	  res.status(500).send(error)
+	 }
+}
+
 app.post("/messages", async(req, res) => {
 	const {to, text, type} = req.body;
   const from = req.headers.user;
   const validation = messageScheme.validate({from, to, text, type});
-  
+  const userexists = await db.collection('participante').findOne({name: from})
+ 
+  if(userexists === null){
+    res.sendStatus(409)
+    return
+  }
+
   if (validation.error) {
    res.sendStatus(422)
   } else{
@@ -92,44 +118,25 @@ app.get("/messages", async (req, res) => {
   }
 });
 
-  
-app.post("/status"), async(req, res) =>{
-  const name = req.headers.user;
-  try {
-		const user = await db.collection("participantes").findOne({ name: name })
-		if (!user) {
-			res.sendStatus(404)
-			return;
-		}
-  	await usersColection.updateOne({name: user.name}, { $set: {"lastStatus": Date.now()} })
-		res.sendStatus(200)
-		
-	 } catch (error) {
-	  res.status(500).send(error)
-	 }
-}
-
 async function removeparticipant(){
 
   const timelimit = Date.now() - 10000
- 
-
+  
   const participantesout = await db.collection("participante").find({ lastStatus: { $lte:timelimit} }).toArray()
   if(participantesout.length!=0){
-   const exitmessage = participantesout.map(element =>{
-     console.log(element.name)
-     return{
-       from: element.name,to:"Todos",text:"sai da sala...", type: 'status', time: time
-     }
-    })
-    console.log(exitmessage)
-    await db.collection('messagem').insertMany(exitmessage)
-    await db.collection("participante").deleteMany({ lastStatus: { $lte:timelimit} })
+  const exitmessage = participantesout.map(element =>{
+  console.log(element.name)
+  return{
+  from: element.name,to:"Todos",text:"sai da sala...", type: 'status', time: time
   }
+  })
+  console.log(exitmessage)
+  await db.collection('messagem').insertMany(exitmessage)
+  await db.collection("participante").deleteMany({ lastStatus: { $lte:timelimit} })
+  }
+  }
+  setInterval(()=> removeparticipant(),15000)
   
   
-  
-}
-setInterval(()=> removeparticipant(),15000)
 
 app.listen(process.env.PORT, ()=>{console.log("Servidor funcionando")})
